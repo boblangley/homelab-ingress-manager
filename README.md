@@ -83,8 +83,3 @@ multi-arch image to GHCR and creates a GitHub release.
 ```sh
 git tag 1.2.3 && git push origin 1.2.3
 ```
-
-## License
-
-Apache 2.0. caddy-docker-proxy is MIT licensed and used as a Go module
-dependency.
