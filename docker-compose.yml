@@ -1,0 +1,46 @@
+# Minimal deployment: Caddy + OPNsense sync on one Docker host.
+# Copy .env.example to .env and fill in your values, then: docker compose up -d
+services:
+  ingress:
+    image: ghcr.io/boblangley/homelab-ingress-manager:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      # caddy-docker-proxy: only proxy to containers on this network.
+      CADDY_INGRESS_NETWORKS: ingress
+      # OPNsense integration (leave OPNSENSE_URL empty to run Caddy only).
+      OPNSENSE_URL: ${OPNSENSE_URL}
+      OPNSENSE_API_KEY: ${OPNSENSE_API_KEY}
+      OPNSENSE_API_SECRET: ${OPNSENSE_API_SECRET}
+      OPNSENSE_INSECURE_SKIP_VERIFY: ${OPNSENSE_INSECURE_SKIP_VERIFY:-false}
+      # LAN IP of this Docker host: DNS overrides point here, port forwards target it.
+      INGRESS_HOST_IP: ${INGRESS_HOST_IP}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - ingress
+
+  # Example app: served at https://whoami.home.arpa with a certificate from
+  # Caddy's internal CA, and resolvable through OPNsense Unbound.
+  whoami:
+    image: traefik/whoami
+    restart: unless-stopped
+    networks:
+      - ingress
+    labels:
+      caddy: whoami.home.arpa
+      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy.tls: internal
+
+networks:
+  ingress:
+    name: ingress
+
+volumes:
+  caddy_data:
+  caddy_config:

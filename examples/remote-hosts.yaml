@@ -1,0 +1,23 @@
+# One ingress instance watching a second Docker host over TCP.
+#
+# Containers on nas.lan get Caddy sites and DNS overrides that point at this
+# host (where Caddy runs); their port forwards target nas.lan's own IP.
+# Caddy must be able to reach the upstreams on the remote host, e.g. via
+# published ports: caddy.reverse_proxy: "nas.lan:8080".
+services:
+  ingress:
+    image: ghcr.io/boblangley/homelab-ingress-manager:latest
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      CADDY_DOCKER_SOCKETS: unix:///var/run/docker.sock,tcp://nas.lan:2375
+      OPNSENSE_URL: ${OPNSENSE_URL}
+      OPNSENSE_API_KEY: ${OPNSENSE_API_KEY}
+      OPNSENSE_API_SECRET: ${OPNSENSE_API_SECRET}
+      INGRESS_HOST_IP: ${INGRESS_HOST_IP}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:
