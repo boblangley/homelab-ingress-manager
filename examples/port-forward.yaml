@@ -1,0 +1,36 @@
+# A Git server reachable on https://git.home.arpa inside the LAN, with SSH
+# exposed to the internet on WAN port 2222.
+# Run next to the main docker-compose.yml (it joins the "ingress" network).
+services:
+  gitea:
+    image: gitea/gitea:latest
+    restart: unless-stopped
+    ports:
+      - "2222:22" # the port forward targets this host port
+    networks:
+      - ingress
+    labels:
+      caddy: git.home.arpa
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      caddy.tls: internal
+      gateway.portforward.0.protocol: tcp
+      gateway.portforward.0.src_port: "2222"
+      gateway.portforward.0.dst_port: "2222"
+      gateway.portforward.0.description: Gitea SSH
+
+  # Port forward only: no Caddy site, no DNS record.
+  wireguard:
+    image: lscr.io/linuxserver/wireguard:latest
+    restart: unless-stopped
+    cap_add: [NET_ADMIN]
+    ports:
+      - "51820:51820/udp"
+    labels:
+      gateway.portforward.0.protocol: udp
+      gateway.portforward.0.src_port: "51820"
+      gateway.portforward.0.dst_port: "51820"
+      gateway.portforward.0.description: WireGuard
+
+networks:
+  ingress:
+    external: true
