@@ -13,7 +13,7 @@ upstream the change.
 
 | Path | Purpose |
 | --- | --- |
-| `cmd/homelab-ingress-manager/` | `main`: Caddy standard modules + our command package |
+| `cmd/homelab-ingress-manager/` | `main`: Caddy standard modules, extra modules (see `docs/configuration.md`), our command package. `main_test.go` checks the extra modules register. |
 | `internal/command/` | Registers `caddy ingress`: wraps caddy-docker-proxy's `docker-proxy` command (same flags) and starts the reconciler. `config.go` parses env vars. |
 | `internal/labels/` | Pure label parsing: site addresses → host names, `gateway.portforward.*` → port forwards |
 | `internal/reconciler/` | Stateless desired-vs-actual diff against OPNsense, driven by Docker events and a resync ticker |

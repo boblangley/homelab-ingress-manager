@@ -5,7 +5,8 @@ sync.
 
 - **Reverse proxy:** runs [Caddy](https://caddyserver.com) with
   [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy).
-  Container labels become Caddy sites.
+  Container labels become Caddy sites. Also bundles
+  [extra Caddy modules](docs/configuration.md#bundled-caddy-modules).
 - **Local DNS:** every site address in those labels becomes an Unbound host
   override in OPNsense that points at Caddy.
 - **Port forwards:** `gateway.portforward.*` labels become OPNsense
