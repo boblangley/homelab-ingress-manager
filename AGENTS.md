@@ -14,10 +14,11 @@ upstream the change.
 | Path | Purpose |
 | --- | --- |
 | `cmd/homelab-ingress-manager/` | `main`: Caddy standard modules, extra modules (see `docs/configuration.md`), our command package. `main_test.go` checks the extra modules register. |
-| `internal/command/` | Registers `caddy ingress`: wraps caddy-docker-proxy's `docker-proxy` command (same flags) and starts the reconciler. `config.go` parses env vars. |
+| `internal/command/` | Registers `caddy ingress`: wraps caddy-docker-proxy's `docker-proxy` command (same flags) and starts the reconciler. `config.go` parses env vars. `secrets.go` resolves and refreshes Vault references in the environment; `caddyreload.go` force-reloads Caddy through its admin API when they change. |
 | `internal/labels/` | Pure label parsing: site addresses → host names, `gateway.portforward.*` → port forwards |
 | `internal/reconciler/` | Stateless desired-vs-actual diff against OPNsense, driven by Docker events and a resync ticker |
 | `internal/opnsense/` | Minimal OPNsense REST client (Unbound host overrides, destination NAT) |
+| `internal/vault/` | Minimal Vault/OpenBao KV reader (HTTP, HTTPS or `unix://`), `vault:<path>#<field>` references |
 | `internal/opnsense/opnsensetest/` | In-memory fake OPNsense API used by all tests |
 | `e2e/` | Runs a pre-built image (`HLIM_IMAGE`) against the local Docker engine and the fake (`-tags e2e`) |
 | `docs/` | User docs. Update them when env vars, labels or behaviour change. |

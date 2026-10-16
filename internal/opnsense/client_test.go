@@ -110,6 +110,15 @@ func TestAuthFailure(t *testing.T) {
 	}
 }
 
+func TestSetCredentials(t *testing.T) {
+	srv := opnsensetest.New(t)
+	c := opnsense.New(opnsense.Config{URL: srv.URL, APIKey: "old", APISecret: "old"})
+	c.SetCredentials(opnsensetest.APIKey, opnsensetest.APISecret)
+	if _, err := c.SearchHostOverrides(context.Background()); err != nil {
+		t.Fatalf("new credentials not used: %v", err)
+	}
+}
+
 func TestHTTPErrorIsAnError(t *testing.T) {
 	srv, c := newClient(t)
 	srv.FailNext("/api/firewall/d_nat/search_rule", 1)
