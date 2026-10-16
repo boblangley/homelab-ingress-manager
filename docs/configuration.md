@@ -29,6 +29,55 @@ Shared with caddy-docker-proxy:
 | `CADDY_DOCKER_MODE` | In `server` mode the reconciler does not run; it runs on the `controller` (or `standalone`) instance. |
 | `CADDY_DOCKER_ENVFILE` | Env file loaded at startup; the variables above can live there. |
 
+## Secrets from Vault
+
+Any environment variable can take its value from
+[Vault](https://www.vaultproject.io) or [OpenBao](https://openbao.org)
+instead of holding it directly. Set the variable to a reference:
+
+```sh
+OPNSENSE_API_SECRET=vault:secret/data/opnsense#api_secret
+CLOUDFLARE_API_TOKEN=vault:secret/data/cloudflare#api_token
+OIDC_CLIENT_SECRET=vault:secret/data/oidc#client_secret
+```
+
+The format is `vault:<path>#<field>`. `<path>` is the API path after `/v1/`:
+`<mount>/data/<name>` for a KV v2 engine, `<mount>/<name>` for KV v1.
+References are resolved when the container starts, before Caddy and the
+reconciler. If any of them fails to resolve, the container exits.
+`docker inspect` only shows the reference.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VAULT_ADDR` | | `https://vault:8200`, `http://...`, or `unix:///path/to/vault.sock`. Required when a reference is used. |
+| `VAULT_TOKEN` | | Token sent as `X-Vault-Token`. |
+| `VAULT_TOKEN_FILE` | | File holding the token, e.g. a Docker secret or a Vault Agent sink. Read on every request, so rotation is picked up. Ignored when `VAULT_TOKEN` is set. |
+| `VAULT_NAMESPACE` | | Sent as `X-Vault-Namespace`. |
+| `VAULT_CACERT` | | PEM CA bundle for verifying an `https://` Vault. |
+| `VAULT_SKIP_VERIFY` | `false` | Skip TLS verification. |
+| `INGRESS_VAULT_REFRESH_INTERVAL` | `5m` | How often references are re-read. `0` reads them only at startup. |
+
+The token is optional. Leave it unset when a proxy on the Unix socket adds
+the token itself. [Wyrwood](https://github.com/wyrd-company/wyrwood) does
+this: it sets `VAULT_ADDR=unix://.../vault.sock` in the container and
+attaches the container's own token to each request.
+
+### Rotation
+
+On each refresh, changed values replace the old ones in the environment, then:
+
+- `OPNSENSE_API_KEY` / `OPNSENSE_API_SECRET` are used by the next OPNsense
+  request.
+- Caddy re-provisions its current config through its admin API, so
+  `{env.NAME}` placeholders see the new value. Use `{env.NAME}`, not
+  `{$NAME}`, for secrets in labels and the base Caddyfile. `{$NAME}` is
+  substituted once when the Caddyfile is adapted and is not refreshed.
+
+If a refresh fails, the current values stay in place and a warning is logged.
+Other settings, such as `OPNSENSE_URL`, are read only at startup. With
+caddy-docker-proxy's controller/server split, `{env.NAME}` resolves on each
+server, so give each server its own references.
+
 ## Container labels
 
 ### DNS host overrides

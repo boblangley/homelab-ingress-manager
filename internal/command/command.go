@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/caddyserver/caddy/v2"
 	caddycmd "github.com/caddyserver/caddy/v2/cmd"
@@ -38,10 +39,11 @@ func init() {
 		Long: `Runs caddy-docker-proxy exactly like "caddy docker-proxy" and accepts the same
 flags and CADDY_* environment variables. When OPNSENSE_URL is set, it also keeps
 Unbound host overrides and destination NAT rules in OPNsense in sync with the
-labels of running containers.`,
+labels of running containers. Environment variables set to
+vault:<path>#<field> are read from Vault (VAULT_ADDR) before anything starts.`,
 		Flags: dockerProxy.Flags,
 		Func: func(fl caddycmd.Flags) (int, error) {
-			if err := startReconciler(fl); err != nil {
+			if err := start(fl); err != nil {
 				return caddy.ExitCodeFailedStartup, err
 			}
 			return dockerProxy.Func(fl)
@@ -51,11 +53,15 @@ labels of running containers.`,
 
 func logger() *zap.Logger { return caddy.Log().Named("ingress") }
 
-func startReconciler(fl caddycmd.Flags) error {
+// start runs before caddy-docker-proxy: it loads the env file, resolves Vault
+// references, and starts the reconciler and the Vault refresh loop.
+func start(fl caddycmd.Flags) error {
+	ctx := context.Background()
 	log := logger()
 
 	// caddy-docker-proxy loads the env file later; load it now so gateway
-	// settings can live there too. Existing variables are not overridden.
+	// settings and Vault references can live there too. Existing variables
+	// are not overridden.
 	envFile := os.Getenv("CADDY_DOCKER_ENVFILE")
 	if envFile == "" {
 		envFile = fl.String("envfile")
@@ -64,6 +70,11 @@ func startReconciler(fl caddycmd.Flags) error {
 		if err := godotenv.Load(envFile); err != nil {
 			return fmt.Errorf("load env file %s: %w", envFile, err)
 		}
+	}
+
+	sec, err := loadSecrets(ctx, os.Environ(), os.Getenv, os.Setenv, log)
+	if err != nil {
+		return err
 	}
 
 	settings, err := loadSettings(os.Getenv, flagValues{
@@ -75,13 +86,47 @@ func startReconciler(fl caddycmd.Flags) error {
 	if err != nil {
 		return err
 	}
+	opn, err := startReconciler(ctx, settings)
+	if err != nil {
+		return err
+	}
+
+	if sec != nil {
+		// Caddy runs in this process unless it is a controller only.
+		var adminAddr string
+		if settings.Mode != "controller" {
+			adminAddr = caddyAdminAddr(settings.Mode, os.Getenv, fl.String("controller-network"), net.InterfaceAddrs)
+		}
+		go sec.run(ctx, func(ctx context.Context, changed []string) {
+			if opn != nil && slices.ContainsFunc(changed, func(k string) bool {
+				return k == "OPNSENSE_API_KEY" || k == "OPNSENSE_API_SECRET"
+			}) {
+				opn.SetCredentials(os.Getenv("OPNSENSE_API_KEY"), os.Getenv("OPNSENSE_API_SECRET"))
+				log.Info("OPNsense credentials updated")
+			}
+			if adminAddr != "" {
+				if err := reloadCaddy(ctx, adminAddr); err != nil {
+					log.Error("Caddy reload after secret change failed", zap.Error(err))
+				} else {
+					log.Info("Caddy reloaded with updated secrets")
+				}
+			}
+		})
+	}
+	return nil
+}
+
+// startReconciler starts the OPNsense reconciler when it is configured for
+// this instance and returns its OPNsense client, or nil.
+func startReconciler(ctx context.Context, settings Settings) (*opnsense.Client, error) {
+	log := logger()
 	if !settings.Enabled() {
 		log.Info("OPNSENSE_URL not set; OPNsense integration disabled")
-		return nil
+		return nil, nil
 	}
 	if settings.Mode == "server" {
 		log.Info("server mode; OPNsense integration runs on the controller")
-		return nil
+		return nil, nil
 	}
 	if settings.Reconciler.DNSTarget == "" {
 		log.Warn("INGRESS_HOST_IP not set; DNS host overrides disabled")
@@ -91,17 +136,18 @@ func startReconciler(fl caddycmd.Flags) error {
 	// DOCKER_* environment variables for its own clients.
 	hosts, err := dockerHosts(settings)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	r := reconciler.New(settings.Reconciler, opnsense.New(settings.OPNsense), hosts, log)
+	opn := opnsense.New(settings.OPNsense)
+	r := reconciler.New(settings.Reconciler, opn, hosts, log)
 	log.Info("OPNsense integration enabled",
 		zap.String("url", settings.OPNsense.URL),
 		zap.String("dnsTarget", settings.Reconciler.DNSTarget),
 		zap.String("tag", r.Tag()),
 		zap.Int("dockerHosts", len(hosts)))
-	go r.Run(context.Background())
-	return nil
+	go r.Run(ctx)
+	return opn, nil
 }
 
 func dockerHosts(s Settings) ([]reconciler.DockerHost, error) {

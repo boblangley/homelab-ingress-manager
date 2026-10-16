@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,9 +32,11 @@ type Config struct {
 // Client talks to the OPNsense REST API.
 type Client struct {
 	baseURL    string
-	key        string
-	secret     string
 	httpClient *http.Client
+
+	mu     sync.RWMutex
+	key    string
+	secret string
 }
 
 // New creates a client from cfg.
@@ -52,6 +55,13 @@ func New(cfg Config) *Client {
 		secret:     cfg.APISecret,
 		httpClient: &http.Client{Transport: transport, Timeout: timeout},
 	}
+}
+
+// SetCredentials replaces the API key and secret used by later requests.
+func (c *Client) SetCredentials(key, secret string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.key, c.secret = key, secret
 }
 
 // mutationResult is the body OPNsense returns from add/set/del endpoints.
@@ -93,7 +103,9 @@ func (c *Client) post(ctx context.Context, path string, body, out any) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	c.mu.RLock()
 	req.SetBasicAuth(c.key, c.secret)
+	c.mu.RUnlock()
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -18,6 +18,9 @@ services:
       OPNSENSE_INSECURE_SKIP_VERIFY: ${OPNSENSE_INSECURE_SKIP_VERIFY:-false}
       # LAN IP of this Docker host: DNS overrides point here, port forwards target it.
       INGRESS_HOST_IP: ${INGRESS_HOST_IP}
+      # Optional: Vault/OpenBao for vault:<path>#<field> values (docs/configuration.md).
+      VAULT_ADDR: ${VAULT_ADDR:-}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddy_data:/data
