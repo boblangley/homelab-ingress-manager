@@ -1,0 +1,31 @@
+# OIDC login in front of an app with caddy-security.
+# auth.home.arpa hosts the login portal; app.home.arpa requires a login.
+services:
+  ingress:
+    image: ghcr.io/boblangley/homelab-ingress-manager:latest
+    environment:
+      CADDY_INGRESS_NETWORKS: ingress
+      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [ingress]
+    labels:
+      # Login portal. Register https://auth.home.arpa/oauth2/generic/authorization-code-callback
+      # as the redirect URI at the identity provider.
+      caddy: auth.home.arpa
+      caddy.authenticate: with myportal
+
+  app:
+    image: traefik/whoami
+    networks: [ingress]
+    labels:
+      caddy: app.home.arpa
+      caddy.authorize: with users
+      caddy.reverse_proxy: "{{upstreams 80}}"
+
+networks:
+  ingress:
+    name: ingress

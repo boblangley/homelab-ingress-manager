@@ -12,6 +12,9 @@ import (
 	// DNS provider for ACME DNS challenges on Cloudflare-managed zones.
 	_ "github.com/caddy-dns/cloudflare"
 
+	// OIDC/OAuth authentication and authorization in front of upstreams.
+	_ "github.com/greenpau/caddy-security"
+
 	// caddy-docker-proxy plus the "ingress" subcommand.
 	_ "github.com/boblangley/homelab-ingress-manager/internal/command"
 )

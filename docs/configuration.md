@@ -110,3 +110,24 @@ services:
       caddy.reverse_proxy: "{{upstreams 80}}"
       caddy.tls.dns: cloudflare {env.CLOUDFLARE_API_TOKEN}
 ```
+
+### OIDC authentication (`greenpau/caddy-security`)
+
+[caddy-security](https://github.com/greenpau/caddy-security) puts an OIDC or
+OAuth login in front of reverse proxy targets. Its configuration is a global
+`security` block, which is too nested to write comfortably as labels, so put
+it in a base Caddyfile loaded with `CADDY_DOCKER_CADDYFILE_PATH`. Sites then
+use two directives from labels:
+
+| Label | Effect |
+| --- | --- |
+| `caddy.authenticate: with <portal>` | Serves the login portal on this site. |
+| `caddy.authorize: with <policy>` | Requires a valid login for this site. |
+
+[`examples/oidc/`](../examples/oidc/) is a complete setup: a portal at
+`auth.home.arpa` backed by a generic OIDC provider, and a protected app. The
+OIDC client secret is passed to the ingress container as an environment
+variable and referenced as `{env.OIDC_CLIENT_SECRET}` in the base
+Caddyfile. See the
+[caddy-security docs](https://docs.authcrunch.com/) for identity providers,
+policies and user transforms.

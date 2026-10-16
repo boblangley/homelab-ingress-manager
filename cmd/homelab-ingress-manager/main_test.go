@@ -11,6 +11,9 @@ import (
 func TestModulesRegistered(t *testing.T) {
 	for _, id := range []string{
 		"dns.providers.cloudflare",
+		"security",
+		"http.handlers.authenticator",
+		"http.handlers.authorization",
 	} {
 		if _, err := caddy.GetModule(id); err != nil {
 			t.Errorf("module %s: %v", id, err)
