@@ -81,3 +81,32 @@ firewall rule.
 
 Groups with missing or invalid values are logged and skipped. The other
 groups on the same container are still applied.
+
+## Bundled Caddy modules
+
+The image includes Caddy's standard modules plus the ones below. Run
+`docker exec <container> caddy list-modules` for the full list.
+
+### Cloudflare DNS (`caddy-dns/cloudflare`)
+
+[caddy-dns/cloudflare](https://github.com/caddy-dns/cloudflare) lets Caddy
+solve ACME DNS challenges on zones hosted by Cloudflare. Use it for sites
+that are not reachable on ports 80/443 from the internet, such as sites
+published through a Cloudflare Tunnel.
+
+Create a Cloudflare API token with `Zone.Zone:Read` and `Zone.DNS:Edit` on
+the zone, pass it to the ingress container, and reference it from the site's
+labels:
+
+```yaml
+services:
+  ingress:
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+
+  app:
+    labels:
+      caddy: app.example.com
+      caddy.reverse_proxy: "{{upstreams 80}}"
+      caddy.tls.dns: cloudflare {env.CLOUDFLARE_API_TOKEN}
+```

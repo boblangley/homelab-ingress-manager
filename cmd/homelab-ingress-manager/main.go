@@ -9,6 +9,9 @@ import (
 	// Standard Caddy modules.
 	_ "github.com/caddyserver/caddy/v2/modules/standard"
 
+	// DNS provider for ACME DNS challenges on Cloudflare-managed zones.
+	_ "github.com/caddy-dns/cloudflare"
+
 	// caddy-docker-proxy plus the "ingress" subcommand.
 	_ "github.com/boblangley/homelab-ingress-manager/internal/command"
 )
