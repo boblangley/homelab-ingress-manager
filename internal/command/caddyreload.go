@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,38 +14,55 @@ import (
 	"github.com/caddyserver/caddy/v2"
 )
 
-// caddyAdminAddr returns the admin API address of the Caddy server in this
-// process, chosen the same way caddy-docker-proxy chooses it: CADDY_ADMIN,
-// else (server mode) the local address in the controller network, else
-// localhost:2019.
-func caddyAdminAddr(mode string, getenv func(string) string, controllerNetwork string, interfaceAddrs func() ([]net.Addr, error)) string {
+// caddyAdminAddrs returns the addresses the admin API of the Caddy server in
+// this process may listen on, most specific first. caddy-docker-proxy starts
+// the server (standalone or server mode) with CADDY_ADMIN, else its address in
+// the controller network, else localhost:2019. A config the controller loads
+// then moves the admin API to CADDY_ADMIN or the address the controller used
+// to reach it, which is localhost:2019 in standalone mode. So with CADDY_ADMIN
+// set it is the only address; otherwise both remaining ones are candidates.
+func caddyAdminAddrs(getenv func(string) string, controllerNetwork string, interfaceAddrs func() ([]net.Addr, error)) []string {
 	if v := strings.TrimSpace(getenv("CADDY_ADMIN")); v != "" {
 		if !strings.Contains(v, "/") {
 			v = "tcp/" + v
 		}
-		return v
+		return []string{v}
 	}
-	if mode == "server" {
-		if v := getenv("CADDY_CONTROLLER_NETWORK"); v != "" {
-			controllerNetwork = v
-		}
-		if _, subnet, err := net.ParseCIDR(controllerNetwork); err == nil {
-			addrs, _ := interfaceAddrs()
-			for _, a := range addrs {
-				if n, ok := a.(*net.IPNet); ok && subnet.Contains(n.IP) {
-					return "tcp/" + net.JoinHostPort(n.IP.String(), "2019")
-				}
+	var addrs []string
+	if v := getenv("CADDY_CONTROLLER_NETWORK"); v != "" {
+		controllerNetwork = v
+	}
+	if _, subnet, err := net.ParseCIDR(controllerNetwork); err == nil {
+		ifAddrs, _ := interfaceAddrs()
+		for _, a := range ifAddrs {
+			if n, ok := a.(*net.IPNet); ok && subnet.Contains(n.IP) {
+				addrs = append(addrs, "tcp/"+net.JoinHostPort(n.IP.String(), "2019"))
+				break
 			}
 		}
 	}
-	return "tcp/localhost:2019"
+	return append(addrs, "tcp/localhost:2019")
 }
 
-// reloadCaddy makes the Caddy server at the admin address adminAddr
+// reloadCaddy reloads Caddy (see reloadCaddyAt) through the first admin
+// address in adminAddrs that accepts a connection.
+func reloadCaddy(ctx context.Context, adminAddrs []string) error {
+	var err error
+	for _, addr := range adminAddrs {
+		err = reloadCaddyAt(ctx, addr)
+		var opErr *net.OpError
+		if err == nil || !errors.As(err, &opErr) || opErr.Op != "dial" {
+			return err
+		}
+	}
+	return err
+}
+
+// reloadCaddyAt makes the Caddy server at the admin address adminAddr
 // re-provision its current config, so placeholders like {env.NAME} pick up
 // changed environment variables. It uses If-Match, so a config loaded in the
 // meantime (e.g. by caddy-docker-proxy) is never overwritten.
-func reloadCaddy(ctx context.Context, adminAddr string) error {
+func reloadCaddyAt(ctx context.Context, adminAddr string) error {
 	addr, err := caddy.ParseNetworkAddress(adminAddr)
 	if err != nil {
 		return fmt.Errorf("caddy admin address %q: %w", adminAddr, err)

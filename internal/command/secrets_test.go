@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -156,11 +157,12 @@ func TestSecretsRunCallsOnChange(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	got := make(chan []string, 1)
-	go s.run(ctx, func(_ context.Context, changed []string) {
+	go s.run(ctx, func(_ context.Context, changed []string) error {
 		select {
 		case got <- changed:
 		default:
 		}
+		return nil
 	})
 	select {
 	case changed := <-got:
@@ -171,5 +173,49 @@ func TestSecretsRunCallsOnChange(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("onChange not called")
+	}
+}
+
+// TestSecretsRunRetriesFailedChange checks that a change whose application
+// failed (e.g. Caddy unreachable) is retried although Vault no longer
+// reports it as changed.
+func TestSecretsRunRetriesFailedChange(t *testing.T) {
+	kv, addr := newKVServer(t)
+	kv.set("secret/data/app", map[string]any{"token": "one"})
+	var mu sync.Mutex
+	e := envMap{"VAULT_ADDR": addr, "TOKEN": "vault:secret/data/app#token", "INGRESS_VAULT_REFRESH_INTERVAL": "10ms"}
+	setenv := func(k, v string) error { mu.Lock(); defer mu.Unlock(); return e.setenv(k, v) }
+	s, err := loadSecrets(context.Background(), e.environ(), env(e), setenv, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	kv.set("secret/data/app", map[string]any{"token": "two"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := make(chan []string, 10)
+	n := 0 // only touched by the run goroutine
+	go s.run(ctx, func(_ context.Context, changed []string) error {
+		calls <- changed
+		if n++; n < 3 {
+			return errors.New("caddy unreachable")
+		}
+		return nil
+	})
+	for i := 0; i < 3; i++ {
+		select {
+		case changed := <-calls:
+			if !reflect.DeepEqual(changed, []string{"TOKEN"}) {
+				t.Fatalf("call %d: changed = %v", i, changed)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("call %d: onChange not retried", i)
+		}
+	}
+	// After a success there is nothing left to apply.
+	select {
+	case changed := <-calls:
+		t.Fatalf("onChange called again after success: %v", changed)
+	case <-time.After(100 * time.Millisecond):
 	}
 }

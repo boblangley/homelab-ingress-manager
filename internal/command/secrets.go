@@ -107,13 +107,15 @@ func (s *secrets) refresh(ctx context.Context) ([]string, error) {
 
 // run refreshes on every interval until ctx is done and calls onChange with
 // the names of the variables that changed. A failed refresh keeps the
-// current values.
-func (s *secrets) run(ctx context.Context, onChange func(ctx context.Context, changed []string)) {
+// current values. If onChange fails, it is called again on the next tick,
+// with any further changes added, until it succeeds.
+func (s *secrets) run(ctx context.Context, onChange func(ctx context.Context, changed []string) error) {
 	if s.interval == 0 {
 		return
 	}
 	t := time.NewTicker(s.interval)
 	defer t.Stop()
+	var pending []string
 	for {
 		select {
 		case <-ctx.Done():
@@ -126,7 +128,17 @@ func (s *secrets) run(ctx context.Context, onChange func(ctx context.Context, ch
 		}
 		if len(changed) > 0 {
 			s.log.Info("secrets changed in Vault", zap.Strings("vars", changed))
-			onChange(ctx, changed)
+			pending = append(pending, changed...)
+			slices.Sort(pending)
+			pending = slices.Compact(pending)
 		}
+		if len(pending) == 0 {
+			continue
+		}
+		if err := onChange(ctx, pending); err != nil {
+			s.log.Error("applying changed secrets failed; retrying next refresh", zap.Strings("vars", pending), zap.Error(err))
+			continue
+		}
+		pending = nil
 	}
 }

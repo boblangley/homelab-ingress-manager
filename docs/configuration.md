@@ -74,6 +74,7 @@ On each refresh, changed values replace the old ones in the environment, then:
   substituted once when the Caddyfile is adapted and is not refreshed.
 
 If a refresh fails, the current values stay in place and a warning is logged.
+If the Caddy reload fails, it is retried on every refresh until it succeeds.
 Other settings, such as `OPNSENSE_URL`, are read only at startup. With
 caddy-docker-proxy's controller/server split, `{env.NAME}` resolves on each
 server, so give each server its own references.
