@@ -5,13 +5,14 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
 	_ "github.com/caddyserver/caddy/v2/modules/standard"
 )
 
-func TestCaddyAdminAddr(t *testing.T) {
+func TestCaddyAdminAddrs(t *testing.T) {
 	addrs := func() ([]net.Addr, error) {
 		return []net.Addr{
 			&net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(8, 32)},
@@ -19,18 +20,18 @@ func TestCaddyAdminAddr(t *testing.T) {
 		}, nil
 	}
 	for _, tc := range []struct {
-		name, mode, flag string
-		env              map[string]string
-		want             string
+		name, flag string
+		env        map[string]string
+		want       []string
 	}{
-		{"default", "standalone", "", nil, "tcp/localhost:2019"},
-		{"CADDY_ADMIN", "standalone", "", map[string]string{"CADDY_ADMIN": "0.0.0.0:2020"}, "tcp/0.0.0.0:2020"},
-		{"CADDY_ADMIN unix", "server", "", map[string]string{"CADDY_ADMIN": "unix//run/caddy.sock"}, "unix//run/caddy.sock"},
-		{"server controller network flag", "server", "10.200.0.0/16", nil, "tcp/10.200.0.5:2019"},
-		{"server controller network env", "server", "", map[string]string{"CADDY_CONTROLLER_NETWORK": "10.200.0.0/16"}, "tcp/10.200.0.5:2019"},
-		{"standalone ignores controller network", "standalone", "10.200.0.0/16", nil, "tcp/localhost:2019"},
+		{"default", "", nil, []string{"tcp/localhost:2019"}},
+		{"CADDY_ADMIN", "", map[string]string{"CADDY_ADMIN": "0.0.0.0:2020"}, []string{"tcp/0.0.0.0:2020"}},
+		{"CADDY_ADMIN unix", "10.200.0.0/16", map[string]string{"CADDY_ADMIN": "unix//run/caddy.sock"}, []string{"unix//run/caddy.sock"}},
+		{"controller network flag", "10.200.0.0/16", nil, []string{"tcp/10.200.0.5:2019", "tcp/localhost:2019"}},
+		{"controller network env", "", map[string]string{"CADDY_CONTROLLER_NETWORK": "10.200.0.0/16"}, []string{"tcp/10.200.0.5:2019", "tcp/localhost:2019"}},
+		{"no local address in network", "192.168.0.0/24", nil, []string{"tcp/localhost:2019"}},
 	} {
-		if got := caddyAdminAddr(tc.mode, env(tc.env), tc.flag, addrs); got != tc.want {
+		if got := caddyAdminAddrs(env(tc.env), tc.flag, addrs); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
 	}
@@ -39,12 +40,7 @@ func TestCaddyAdminAddr(t *testing.T) {
 // TestReloadCaddy runs a real Caddy instance and checks that reloadCaddy
 // re-provisions the unchanged config.
 func TestReloadCaddy(t *testing.T) {
-	ln, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	adminAddr := "tcp/" + ln.Addr().String()
-	ln.Close()
+	adminAddr := "tcp/" + freeAddr(t)
 
 	cfg := []byte(`{"admin":{"listen":"` + adminAddr + `"},"apps":{"http":{"servers":{"s":{"listen":["localhost:0"],"routes":[{"handle":[{"handler":"static_response","body":"ok"}]}]}}}}}`)
 	if err := caddy.Load(cfg, true); err != nil {
@@ -52,8 +48,10 @@ func TestReloadCaddy(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = caddy.Stop() })
 
+	// The first candidate is unreachable, as the controller-network address
+	// is once a standalone controller has moved the admin API to localhost.
 	before := caddy.ActiveContext().Context
-	if err := reloadCaddy(context.Background(), adminAddr); err != nil {
+	if err := reloadCaddy(context.Background(), []string{"tcp/" + freeAddr(t), adminAddr}); err != nil {
 		t.Fatal(err)
 	}
 	if caddy.ActiveContext().Context == before {
@@ -75,13 +73,17 @@ func TestReloadCaddy(t *testing.T) {
 }
 
 func TestReloadCaddyUnreachable(t *testing.T) {
+	if err := reloadCaddy(context.Background(), []string{"tcp/" + freeAddr(t), "tcp/" + freeAddr(t)}); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+// freeAddr returns a localhost address with nothing listening on it.
+func freeAddr(t *testing.T) string {
 	ln, err := net.Listen("tcp", "localhost:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	addr := ln.Addr().String()
-	ln.Close()
-	if err := reloadCaddy(context.Background(), "tcp/"+addr); err == nil {
-		t.Fatal("want error")
-	}
+	defer ln.Close()
+	return ln.Addr().String()
 }

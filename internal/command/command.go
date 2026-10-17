@@ -93,24 +93,25 @@ func start(fl caddycmd.Flags) error {
 
 	if sec != nil {
 		// Caddy runs in this process unless it is a controller only.
-		var adminAddr string
+		var adminAddrs []string
 		if settings.Mode != "controller" {
-			adminAddr = caddyAdminAddr(settings.Mode, os.Getenv, fl.String("controller-network"), net.InterfaceAddrs)
+			adminAddrs = caddyAdminAddrs(os.Getenv, fl.String("controller-network"), net.InterfaceAddrs)
 		}
-		go sec.run(ctx, func(ctx context.Context, changed []string) {
+		go sec.run(ctx, func(ctx context.Context, changed []string) error {
 			if opn != nil && slices.ContainsFunc(changed, func(k string) bool {
 				return k == "OPNSENSE_API_KEY" || k == "OPNSENSE_API_SECRET"
 			}) {
 				opn.SetCredentials(os.Getenv("OPNSENSE_API_KEY"), os.Getenv("OPNSENSE_API_SECRET"))
 				log.Info("OPNsense credentials updated")
 			}
-			if adminAddr != "" {
-				if err := reloadCaddy(ctx, adminAddr); err != nil {
-					log.Error("Caddy reload after secret change failed", zap.Error(err))
-				} else {
-					log.Info("Caddy reloaded with updated secrets")
-				}
+			if len(adminAddrs) == 0 {
+				return nil
 			}
+			if err := reloadCaddy(ctx, adminAddrs); err != nil {
+				return fmt.Errorf("caddy reload: %w", err)
+			}
+			log.Info("Caddy reloaded with updated secrets")
+			return nil
 		})
 	}
 	return nil

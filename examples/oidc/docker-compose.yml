@@ -3,6 +3,10 @@
 services:
   ingress:
     image: ghcr.io/boblangley/homelab-ingress-manager:latest
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
     environment:
       CADDY_INGRESS_NETWORKS: ingress
       CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
