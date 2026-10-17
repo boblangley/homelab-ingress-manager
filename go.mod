@@ -9,6 +9,7 @@ require (
 	github.com/greenpau/caddy-security v1.4.1
 	github.com/joho/godotenv v1.5.1
 	github.com/lucaslorentz/caddy-docker-proxy/v2 v2.12.1
+	github.com/mholt/caddy-l4 v0.1.2
 	go.uber.org/zap v1.28.0
 )
 
@@ -65,6 +66,7 @@ require (
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/emersion/go-smtp v0.25.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
 	github.com/go-chi/chi/v5 v5.3.2 // indirect
@@ -147,6 +149,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747 // indirect
+	github.com/things-go/go-socks5 v0.1.1 // indirect
 	github.com/urfave/cli v1.22.17 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/goldmark v1.8.6 // indirect

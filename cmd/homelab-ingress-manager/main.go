@@ -15,6 +15,9 @@ import (
 	// OIDC/OAuth authentication and authorization in front of upstreams.
 	_ "github.com/greenpau/caddy-security"
 
+	// Raw TCP/UDP routing and proxying.
+	_ "github.com/mholt/caddy-l4"
+
 	// caddy-docker-proxy plus the "ingress" subcommand.
 	_ "github.com/boblangley/homelab-ingress-manager/internal/command"
 )

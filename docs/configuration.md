@@ -181,3 +181,29 @@ variable and referenced as `{env.OIDC_CLIENT_SECRET}` in the base
 Caddyfile. See the
 [caddy-security docs](https://docs.authcrunch.com/) for identity providers,
 policies and user transforms.
+
+### TCP/UDP routing (`mholt/caddy-l4`)
+
+[caddy-l4](https://github.com/mholt/caddy-l4) adds the `layer4` app for raw
+TCP/UDP routing, proxying, protocol matching, and TLS passthrough or termination.
+Configure its global `layer4` block in a base Caddyfile loaded with
+`CADDY_DOCKER_CADDYFILE_PATH`, alongside your HTTP sites. For example:
+
+```caddyfile
+{
+    layer4 {
+        :5000 {
+            route {
+                proxy app:5000
+            }
+        }
+    }
+}
+```
+
+Publish each listener's port from the ingress container (for this example,
+`5000:5000/tcp`) and make the upstream reachable from its Docker network.
+Layer 4 listeners do not create OPNsense records automatically; DNS host
+overrides still come from site labels and NAT rules from `gateway.portforward.*`
+labels. See the [caddy-l4 documentation](https://github.com/mholt/caddy-l4/tree/master/docs)
+for matchers, handlers, and UDP listener configuration.

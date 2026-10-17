@@ -11,6 +11,11 @@ import (
 func TestModulesRegistered(t *testing.T) {
 	for _, id := range []string{
 		"dns.providers.cloudflare",
+		"layer4",
+		"layer4.handlers.echo",
+		"layer4.handlers.proxy",
+		"layer4.handlers.tls",
+		"layer4.matchers.tls",
 		"security",
 		"http.handlers.authenticator",
 		"http.handlers.authorization",
